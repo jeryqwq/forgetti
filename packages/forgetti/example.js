@@ -1,5 +1,5 @@
 import * as babel from '@babel/core';
-import plugin from 'forgetti';
+import plugin from './dist/esm/development/index.mjs';
 import { readFile } from 'fs/promises';
 
 const options = {

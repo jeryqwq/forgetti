@@ -163,6 +163,7 @@ function transformFunction(
     simplifyExpressions(unwrapped);
     // expand for assignment and hook calls
     expandExpressions(ctx, unwrapped);
+    // gen Memo Function
     optimizeJSX(ctx, unwrapped);
     // optimize
     new Optimizer(ctx, unwrapped).optimize();

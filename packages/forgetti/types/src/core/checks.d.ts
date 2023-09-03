@@ -1,0 +1,15 @@
+import type * as t from '@babel/types';
+import type * as babel from '@babel/core';
+import type { ComponentNode, StateContext } from './types';
+export declare function getImportSpecifierName(specifier: t.ImportSpecifier): string;
+export declare function isComponent(node: t.Node): node is ComponentNode;
+export declare function isHookName(ctx: StateContext, id: t.Identifier): boolean;
+export declare function isHookOrComponentName(ctx: StateContext, id: t.Identifier): boolean;
+export declare function shouldSkipNode(node: t.Node): boolean;
+export declare function shouldSkipJSX(node: t.Node): boolean;
+export declare function isComponentValid(ctx: StateContext, node: ComponentNode, checkName: boolean): boolean;
+type TypeFilter<V extends t.Node> = (node: t.Node) => node is V;
+export declare function isPathValid<V extends t.Node>(path: unknown, key: TypeFilter<V>): path is babel.NodePath<V>;
+export type NestedExpression = t.ParenthesizedExpression | t.TypeCastExpression | t.TSAsExpression | t.TSSatisfiesExpression | t.TSNonNullExpression | t.TSInstantiationExpression | t.TSTypeAssertion;
+export declare function isNestedExpression(node: t.Node): node is NestedExpression;
+export {};
