@@ -949,6 +949,7 @@ export default class Optimizer {
   optimizeExpressionStatement(
     path: babel.NodePath<t.ExpressionStatement>,
   ): void {
+    // 绑定依赖和equle
     const optimized = this.optimizeExpression(path.get('expression'));
     this.scope.push(t.expressionStatement(optimized.expr));
   }
