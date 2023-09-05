@@ -24,6 +24,7 @@ import { expandExpressions } from './core/expand-expressions';
 import { inlineExpressions } from './core/inline-expressions';
 import { simplifyExpressions } from './core/simplify-expressions';
 import optimizeJSX from './core/optimize-jsx';
+import generate from "@babel/generator";
 
 export type { Options };
 
@@ -158,15 +159,20 @@ function transformFunction(
     if (!checkName && unwrapped.node.type !== 'ArrowFunctionExpression') {
       unwrapped.node.id = undefined;
     }
+    const {code: initCode} =  generate.default(unwrapped.node);
     // inline expressions
     inlineExpressions(unwrapped);
-    simplifyExpressions(unwrapped);
+    const {code: inlineCode} =  generate.default(unwrapped.node);
+    simplifyExpressions(unwrapped); // 简化表达式
+    const {code: isimplifyCode} =  generate.default(unwrapped.node);
     // expand for assignment and hook calls
     expandExpressions(ctx, unwrapped);
-    // gen Memo Function
-    optimizeJSX(ctx, unwrapped);
+    const { code: expandCode } =  generate.default(unwrapped.node);
+    optimizeJSX(ctx, unwrapped); // 修改组件jsx部分生成HOC，把所有jsx依赖的状态转换为参数传入，后续替换对应的value并添加cache逻辑， return (/*@forgetti jsx*/<_Memo v={[() => setDone(true), a, done ? 'finish' : 'doing']} />  );}
+    const { code: optimizeJSXCode } =  generate.default(unwrapped.node);
     // optimize
-    new Optimizer(ctx, unwrapped).optimize();
+    new Optimizer(ctx, unwrapped).optimize(); // 全文核心，缓存所有表达式函数变量
+    const { code: optimizeedCode } =  generate.default(unwrapped.node);
     // inline again
     inlineExpressions(unwrapped);
   }

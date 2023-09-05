@@ -26,6 +26,7 @@
     "vitest": "^0.28.1"
   },
   "dependencies": {
+    "@babel/generator": "^7.22.15",
     "@babel/helper-module-imports": "^7.18.6",
     "@babel/traverse": "^7.21.3",
     "@babel/types": "^7.21.3"
