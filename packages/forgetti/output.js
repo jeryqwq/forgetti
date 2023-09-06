@@ -7,25 +7,28 @@ const _Memo = _$$memo(_memo, _values => <div onClick={_values[0]}>{_values[1]} -
 const App = ({
   a
 }) => {
-  let _cache = _$$cache(_useMemo, 9);
+  let _cache = _$$cache(_useMemo, 10);
   const [done, setDone] = useState(false);
-  let _equals = _$$equals(_cache, 0, setDone),
-    _value = _equals ? _cache[0] : _cache[0] = setDone,
-    _value2 = _equals ? _cache[1] : _cache[1] = () => setDone(true),
-    _equals2 = _$$equals(_cache, 2, _value2),
-    _value3 = _equals2 ? _cache[2] : _cache[2] = _value2,
-    _equals3 = _$$equals(_cache, 3, a),
-    _value4 = _equals3 ? _cache[3] : _cache[3] = a,
-    _value5;
-  if (_$$equals(_cache, 4, done) ? _cache[4] : _cache[4] = done) {
-    _value5 = 'finish';
+  let _equals = _$$equals(_cache, 0, done),
+    _value = _equals ? _cache[0] : _cache[0] = done;
+  _equals ? _cache[1] : _cache[1] = console.log(_value);
+  let _equals2 = _$$equals(_cache, 2, setDone),
+    _value3 = _equals2 ? _cache[2] : _cache[2] = setDone,
+    _value4 = _equals2 ? _cache[3] : _cache[3] = () => setDone(true),
+    _equals3 = _$$equals(_cache, 4, _value4),
+    _value5 = _equals3 ? _cache[4] : _cache[4] = _value4,
+    _equals4 = _$$equals(_cache, 5, a),
+    _value6 = _equals4 ? _cache[5] : _cache[5] = a,
+    _value7;
+  if (_value) {
+    _value7 = 'finish';
   } else {
-    _value5 = 'doing';
+    _value7 = 'doing';
   }
-  let _equals5 = _$$equals(_cache, 5, _value5),
-    _value7 = _equals5 ? _cache[5] : _cache[5] = _value5,
-    _value8 = _equals2 && _equals3 && _equals5 ? _cache[6] : _cache[6] = [_value3, _value4, _value7],
-    _equals7 = _$$equals(_cache, 7, _value8),
-    _value9 = _equals7 ? _cache[7] : _cache[7] = _value8;
-  return _equals7 ? _cache[8] : _cache[8] = /*@forgetti jsx*/<_Memo v={_value9} />;
+  let _equals5 = _$$equals(_cache, 6, _value7),
+    _value8 = _equals5 ? _cache[6] : _cache[6] = _value7,
+    _value9 = _equals3 && _equals4 && _equals5 ? _cache[7] : _cache[7] = [_value5, _value6, _value8],
+    _equals7 = _$$equals(_cache, 8, _value9),
+    _value10 = _equals7 ? _cache[8] : _cache[8] = _value9;
+  return _equals7 ? _cache[9] : _cache[9] = /*@forgetti jsx*/<_Memo v={_value10} />;
 };

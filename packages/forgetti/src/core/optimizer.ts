@@ -875,6 +875,7 @@ export default class Optimizer {
   optimizeExpression(
     path: babel.NodePath<t.Expression>,
   ): OptimizedExpression {
+    // if (shouldSkipNode(path.node) || path.node?.callee?.object?.name === 'console') {
     if (shouldSkipNode(path.node)) {
       return optimizedExpr(path.node, undefined, true);
     }

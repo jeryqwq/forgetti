@@ -26,7 +26,7 @@ const App = ({
   a
 }) => {
   let _cache = _$$cache(_useMemo, 7); // 初始化缓存数组， 根据索引对下面的表达式｜变量定义｜函数 进行缓存
-  const [done, setDone] = useState(false); // set 函数每次渲染本就是同一个函数，可以直接忽略
+  const [done, setDone] = useState(false); // set 函数没有被用到，忽略
   let _equals = _$$equals(_cache, 0, done),  // 首次执行时必为false
     _value = _equals ? _cache[0] : _cache[0] = done; // 映射done变量， 相等优先使用缓存，否则替换最新的缓存结果
   _equals ? _cache[1] : _cache[1] = console.log(_value); // console这里作为函数处理，哪怕没有变量接收返回值，也做了一次缓存， console 依赖了done ，done是否被缓存来源于_equals，如果为true就不需要更新，直接使用上一次的缓存，所以这对于业务来说是bug，会导致第一次打印，第二次以后都不会执行了，正常应该直接替换依赖缓存不做cache即可，即 console.log(_value);不用走缓存，本就没有返回值
@@ -35,14 +35,14 @@ const App = ({
   */
   let _equals2 = _$$equals(_cache, 2, a), // 判断a是否被缓存， 首次都是false
     _value3 = _equals2 ? _cache[2] : _cache[2] = a, // 首次执行赋值， 刷新时优先使用缓存
-    _value4; // 二元表达式结果
+    _value4; // 表达式结果
   if (_value) {
     _value4 = 'finish';
   } else {
     _value4 = 'doing';
   }
-  let _equals3 = _$$equals(_cache, 3, _value4),  // 判断二元表达式结果是否相等
-    _value5 = _equals3 ? _cache[3] : _cache[3] = _value4, // 二元表达式缓存
+  let _equals3 = _$$equals(_cache, 3, _value4),  // 判断表达式结果是否相等
+    _value5 = _equals3 ? _cache[3] : _cache[3] = _value4, // 表达式缓存
     /** jsx编译走的也是函数那一套处理方式， 找出jsx渲染对应的依赖，如果当前返回的节点依赖都没变化，那么就也可以使用缓存， jsx当前依赖了a和done,他们对应的是_equals2和_equals3 */ 
     _value6 = _equals2 && _equals3 ? _cache[4] : _cache[4] = [_value3, _value5],
     _equals5 = _$$equals(_cache, 5, _value6), // 判断jsx能不能使用缓存， 依赖都一致下就可以使用
