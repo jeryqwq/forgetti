@@ -60,8 +60,132 @@ const App = ({
 
 ```
 
+## 优化步骤
+1. 函数内联展开， 建议后置查看
 
+缓存内联表达式， 针对优化后的代码进行二次操作，删除无用缓存。
 
+```ts
+export function inlineExpressions(
+  path: babel.NodePath<ComponentNode>,
+): void {
+  path.traverse({
+    Expression(p) {
+       // 在当前函数作用域下 并且是标识符(理解为变量名)
+      if (p.getFunctionParent() === path && isPathValid(p, t.isIdentifier)) {
+        const binding = p.scope.getBinding(p.node.name);
+        // 检查标识符是否被引用过，并且只被引用了一次。
+        if (binding && binding.referenced && binding.referencePaths.length === 1) {
+          switch (binding.kind) {
+            case 'const':
+            case 'let':
+            case 'var': {
+              // move the node to the reference
+              const ref = binding.referencePaths[0];
+              if (
+                isInValidExpression(ref)
+                && isPathValid(binding.path, t.isVariableDeclarator)
+                && binding.path.node.init
+                && isPathValid(binding.path.get('id'), t.isIdentifier)
+                && binding.path.scope.getBlockParent() === ref.scope.getBlockParent()
+              ) { // 去除无用缓存
+                ref.replaceWith(binding.path.node.init);
+                binding.path.remove();
+              }
+            }
+              break;
+            default:
+              break;
+          }
+        }
+      }
+    },
+  });
+  path.scope.crawl();
+}
+```
+input: 
+```jsx
+
+```
+output: 
+
+```jsx
+
+```
+
+2.简化代码
+
+2-1 条件表达式简化
+各种类型自动转boolean
+```ts
+   ConditionalExpression: {
+      exit(p) {
+        // 根据原有类型的值进行转换， 如0 转为false , 详情查看getBooleanishState函数
+        const state = getBooleanishState(p.node.test);
+        if (state === 'truthy') {
+          // 直接替换真值对应的表达式
+          p.replaceWith(p.node.consequent);
+        } else if (state !== 'indeterminate') {
+          // 直接替换假值对应的表达式
+          p.replaceWith(p.node.alternate);
+        }
+      },
+    },
+```
+2-2 逻辑表达式优化
+
+同上，核心也是通过查看对应的类型返回的真假进行去除不需要的代码
+
+```ts
+  LogicalExpression: {
+      exit(p) {
+      // 获取结果
+        switch (getBooleanishState(p.node.left)) {
+          case 'nullish':
+          // null undefinded   和?? 关系 处理
+            p.replaceWith(p.node.operator === '??' ? p.node.right : p.node.left);
+            break;
+          case 'falsy':
+          //  假 和 或关系 => 处理
+
+            p.replaceWith(p.node.operator === '||' ? p.node.right : p.node.left);
+            break;
+          case 'truthy':
+            // 真 和&& 关系处理
+            p.replaceWith(p.node.operator === '&&' ? p.node.right : p.node.left);
+            break;
+          default:
+            break;
+        }
+      },
+    },
+```
+
+2-3 一元表达式简化
+```ts
+    UnaryExpression: {
+      exit(p) {
+        const state = getBooleanishState(p.node.argument);
+        switch (p.node.operator) {
+          case 'void':
+            if (state !== 'indeterminate') {
+              p.replaceWith(t.identifier('undefined'));
+            }
+            break;
+          case '!':
+            if (state === 'truthy') {
+              p.replaceWith(t.booleanLiteral(false));
+            } else if (state !== 'indeterminate') {
+              p.replaceWith(t.booleanLiteral(true));
+            }
+            break;
+          default:
+            break;
+        }
+      },
+    },
+```
 ## forgettti runtime 
 
 ## 缓存props

@@ -175,6 +175,8 @@ function transformFunction(
     const { code: optimizeedCode } =  generate.default(unwrapped.node);
     // inline again
     inlineExpressions(unwrapped);
+    const { code: inlineCode_2 } = generate.default(unwrapped.node);
+    console.log(1);
   }
 }
 
