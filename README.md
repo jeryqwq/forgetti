@@ -114,9 +114,9 @@ output:
 
 ```
 
-2.简化代码
+### 简化代码
 
-2-1 条件表达式简化
+#### 条件表达式简化
 各种类型自动转boolean
 ```ts
    ConditionalExpression: {
@@ -133,7 +133,7 @@ output:
       },
     },
 ```
-2-2 逻辑表达式优化
+#### 逻辑表达式优化
 
 同上，核心也是通过查看对应的类型返回的真假进行去除不需要的代码
 
@@ -162,18 +162,21 @@ output:
     },
 ```
 
-2-3 一元表达式简化
+#### 一元表达式简化
+也称先序， 顾名思义， 在表达式中级别最高的计算
++=， -= !1  ...
+目前仅针对void !这两种先序的情况进行处理
 ```ts
     UnaryExpression: {
       exit(p) {
         const state = getBooleanishState(p.node.argument);
         switch (p.node.operator) {
-          case 'void':
+          case 'void': // void后不论跟啥直接转换为undefined ， 在某些场景会有问题
             if (state !== 'indeterminate') {
               p.replaceWith(t.identifier('undefined'));
             }
             break;
-          case '!':
+          case '!': // 对表达式直接取反出结果, !0 先对0进行转换为false，在这里直接转换为true  
             if (state === 'truthy') {
               p.replaceWith(t.booleanLiteral(false));
             } else if (state !== 'indeterminate') {
@@ -186,17 +189,37 @@ output:
       },
     },
 ```
-## forgettti runtime 
+#### if条件语句
+同理，对条件进行最终求值后再次优化
+```ts
+   IfStatement: {
+      exit(p) {
+        const state = getBooleanishState(p.node.test);
+        if (state === 'truthy') { // 如果条件内为true， 直接去除if
+          p.replaceWith(p.node.consequent);
+        } else if (state === 'indeterminate') { // 不明确啥也不做
+          // TODO Should simplify IfStatement?
+        } else if (p.node.alternate) { // 走到这里就是不满足的情况，即if(false){}, 所以直接替换else中的内容
+          p.replaceWith(p.node.alternate);
+        } else {
+          p.remove();
+        }
+      },
+    },
+```
+其他的简化表达式没啥可讲的， 都是很难碰上的一些小优化， 还有while
 
-## 缓存props
+### 展开
 
-## 缓存表达式
 
-## 函数依赖｜Jsx依赖解析
+## Jsx优化【核心】
+## 缓存【核心】
 
 获取表达式依赖: forgetti/src/core/optimizer.ts  createDependency
 创建缓存依赖(加索引，生成二元表达式):forgetti/src/core/optimizer.ts createMemo
-## HOC 解析
+
+## forgettti runtime 
+
 
 ## 目前发现的优化点｜Bug
 
