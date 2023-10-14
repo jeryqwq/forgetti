@@ -51,10 +51,10 @@ const UNDEFINED_LITERAL = t.unaryExpression('void', t.numericLiteral(0));
 
 function transformOptionalCall(path: babel.NodePath<t.OptionalCallExpression>): t.Expression {
   const unwrappedID = unwrapNode(path.node.callee, t.isIdentifier);
-  if (unwrappedID) {
-    return t.conditionalExpression(
-      t.binaryExpression(
-        '==',
+  if (unwrappedID) { // 如果是定义的函数， 感觉没多大意义， 对一个已经定义的函数加可选链，这里也做了适配。
+    return t.conditionalExpression( // 创建一个三元表达式
+      t.binaryExpression( // 包一个二元表达式 unwrappedID == null;
+        '==', // 一整句三元表达式为 unwrappedID == null ? void 0 : unwrappedID.call(xxx,xxx);
         unwrappedID,
         t.nullLiteral(),
       ),
@@ -64,9 +64,9 @@ function transformOptionalCall(path: babel.NodePath<t.OptionalCallExpression>): 
         path.node.arguments,
       ),
     );
-  }
-  const temp = path.scope.generateUidIdentifier('nullish');
-  path.scope.push({
+  }// 如果不是定义的参数，例如：外部传入，或者其他模块引入等
+  const temp = path.scope.generateUidIdentifier('nullish'); // 创建一个临时变量
+  path.scope.push({ // 生成变量定义语句 let nullish
     kind: 'let',
     id: temp,
   });
@@ -74,18 +74,18 @@ function transformOptionalCall(path: babel.NodePath<t.OptionalCallExpression>): 
     || unwrapNode(path.node.callee, t.isOptionalMemberExpression);
   if (unwrappedCallee) {
     let unwrappedObject = unwrapNode(unwrappedCallee.object, t.isIdentifier);
-    if (!unwrappedObject) {
+    if (!unwrappedObject) { // 如果是b?.()
       unwrappedObject = path.scope.generateUidIdentifier('object');
       path.scope.push({
         kind: 'let',
         id: unwrappedObject,
       });
       unwrappedCallee.object = t.assignmentExpression('=', unwrappedObject, unwrappedCallee.object);
-    }
+    } // 如果是a.b?.()
     return t.conditionalExpression(
-      t.binaryExpression(
+      t.binaryExpression( //  _hoisted == null ? void 0 : _nullish.call(props, props.b, props.c)
         '==',
-        t.assignmentExpression('=', temp, unwrappedCallee),
+        t.assignmentExpression('=', temp, unwrappedCallee), // 生成赋值语句  nullish = a.b
         t.nullLiteral(),
       ),
       UNDEFINED_LITERAL,
@@ -95,7 +95,7 @@ function transformOptionalCall(path: babel.NodePath<t.OptionalCallExpression>): 
       ),
     );
   }
-  return t.conditionalExpression(
+  return t.conditionalExpression( //   _nullish ? void 0 : _nullish(xxx)
     t.binaryExpression(
       '==',
       t.assignmentExpression('=', temp, path.node.callee),
@@ -151,12 +151,12 @@ export function expandExpressions(
   path: babel.NodePath<ComponentNode>,
 ): void {
   if (path.node.type === 'ArrowFunctionExpression' && path.node.body.type !== 'BlockStatement') {
-    path.node.body = t.blockStatement(
+    path.node.body = t.blockStatement( // 如果是箭头函数或者没有加{}的函数， 手动添加一个{}, 用来写入缓存代码
       [t.returnStatement(path.node.body)],
     );
   }
   path.traverse({
-    OptionalCallExpression(p) {
+    OptionalCallExpression(p) { // 可选链函数调用
       const parent = p.getFunctionParent();
       const statement = p.getStatementParent();
 
@@ -167,7 +167,7 @@ export function expandExpressions(
         p.replaceWith(transformOptionalCall(p));
       }
     },
-    OptionalMemberExpression(p) {
+    OptionalMemberExpression(p) { // 可选链访问
       const parent = p.getFunctionParent();
       const statement = p.getStatementParent();
 

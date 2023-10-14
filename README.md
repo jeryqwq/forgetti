@@ -61,9 +61,17 @@ const App = ({
 ```
 
 ## 优化步骤
-1. 函数内联展开， 建议后置查看
+### 函数内联展开[前置]
+将只用到一次且在组件函数体内定义的函数移至函数调用处, 缓存后避免每次刷新都重复定义， 如，
+改步奏会执行两次，初始化时执行一次，各种缓存优化后再执行一次，二次优化缓存的代码。
+```js
+//  优化前
 
-缓存内联表达式， 针对优化后的代码进行二次操作，删除无用缓存。
+function a () {}
+useEffect(a, [])
+//  优化后
+useEffect(function a () {}, []) // 方便后续进行依赖查找&缓存
+```
 
 ```ts
 export function inlineExpressions(
@@ -88,7 +96,7 @@ export function inlineExpressions(
                 && binding.path.node.init
                 && isPathValid(binding.path.get('id'), t.isIdentifier)
                 && binding.path.scope.getBlockParent() === ref.scope.getBlockParent()
-              ) { // 去除无用缓存
+              ) { //  满足以上条件将原来的函数替换
                 ref.replaceWith(binding.path.node.init);
                 binding.path.remove();
               }
@@ -106,12 +114,12 @@ export function inlineExpressions(
 ```
 input: 
 ```jsx
-
+props => {  const [a, setA] = useChencc(1);  const [b, setB] = useState(1);  const c = function () {    console.log(a);  };  test(c);  useEffect(() => {}, [b]);  return <div onClick={() => {    console.log(props);    setA(2);  }}>123</div>;}
 ```
 output: 
 
 ```jsx
-
+props => {  const [a, setA] = useChencc(1);  const [b, setB] = useState(1);  test(function () {    console.log(a);  });  useEffect(() => {}, [b]);  return <div onClick={() => {    console.log(props);    setA(2);  }}>123</div>;}
 ```
 
 ### 简化代码
@@ -210,7 +218,98 @@ output:
 其他的简化表达式没啥可讲的， 都是很难碰上的一些小优化， 还有while
 
 ### 展开
+  赋值表达式和钩子调用被移动到最近的块级作用域。
 
+ 核心是将所有的复杂代码情况简单化，方便后续缓存处理： 如可选链调用，可选链函数执行，同一行多个赋值语句，需要进一步优化后统一走缓存。
+#### 函数执行可选链转换
+
+当遇到动态参数传递的时候， 使用可选链函数调用时， 需要走一步转换，转换为三元表达式处理，如:
+```js
+function Example (props) { // 让编译阶段能够更好的优化，手动做一层转换
+  return props.a?.(props.b, props.b);
+}
+
+function Example(props) {  let _nullish;  let _hoisted = _nullish = props.a;  return _hoisted == null ? void 0 : _nullish.call(props, props.b, props.c);}
+```
+
+```js
+function transformOptionalCall(path: babel.NodePath<t.OptionalCallExpression>): t.Expression {
+  const unwrappedID = unwrapNode(path.node.callee, t.isIdentifier);
+  if (unwrappedID) { // 如果是定义的函数， 感觉没多大意义， 对一个已经定义的函数加可选链，这里也做了适配。
+    return t.conditionalExpression( // 创建一个三元表达式
+      t.binaryExpression( // 包一个二元表达式 unwrappedID == null;
+        '==', // 一整句三元表达式为 unwrappedID == null ? void 0 : unwrappedID.call(xxx,xxx);
+        unwrappedID,
+        t.nullLiteral(),
+      ),
+      UNDEFINED_LITERAL,
+      t.callExpression(
+        unwrappedID,
+        path.node.arguments,
+      ),
+    );
+  }// 如果不是定义的参数，例如：外部传入，或者其他模块引入等
+  const temp = path.scope.generateUidIdentifier('nullish'); // 创建一个临时变量
+  path.scope.push({ // 生成变量定义语句 let nullish
+    kind: 'let',
+    id: temp,
+  });
+  const unwrappedCallee = unwrapNode(path.node.callee, t.isMemberExpression)
+    || unwrapNode(path.node.callee, t.isOptionalMemberExpression);
+  if (unwrappedCallee) {
+    let unwrappedObject = unwrapNode(unwrappedCallee.object, t.isIdentifier);
+    if (!unwrappedObject) { // 如果是b?.()
+      unwrappedObject = path.scope.generateUidIdentifier('object');
+      path.scope.push({
+        kind: 'let',
+        id: unwrappedObject,
+      });
+      unwrappedCallee.object = t.assignmentExpression('=', unwrappedObject, unwrappedCallee.object);
+    } // 如果是a.b?.()
+    return t.conditionalExpression(
+      t.binaryExpression( //  _hoisted == null ? void 0 : _nullish.call(props, props.b, props.c)
+        '==',
+        t.assignmentExpression('=', temp, unwrappedCallee), // 生成赋值语句  nullish = a.b
+        t.nullLiteral(),
+      ),
+      UNDEFINED_LITERAL,
+      t.callExpression(
+        t.memberExpression(temp, t.identifier('call')),
+        [unwrappedObject, ...path.node.arguments],
+      ),
+    );
+  }
+}
+```
+
+#### 变量调用可选链转换
+处理当变量中包含可选链的多级调用。核心处理也是同上，走代码转换
+源码位置:  expand-expression.ts ->  transformOptionalMember
+```js
+function Example(props) {
+  return props?.a?.b?.c;
+}
+// 展开后
+function Example(props) {  let _nullish, _nullish2;  let _hoisted2 = _nullish2 = props == null ? void 0 : props.a;  let _hoisted = _nullish = _hoisted2 == null ? void 0 : _nullish2.b;  return _hoisted == null ? void 0 : _nullish.c;}
+```
+#### 赋值语句转换
+生成缓存变量存储已有变量
+```js
+function Example(props) {  let a, b, c;  a = b = c = props.x;}
+// 展开后
+function Example(props) {  let a, b, c;  let _hoisted2 = c = props.x;  let _hoisted = b = _hoisted2;  a = _hoisted;}
+```
+
+```js
+ const id = p.scope.generateUidIdentifier('hoisted'); // 生成缓存不重复变量
+        statement.insertBefore( // 在赋值语句前插入定义的变量
+          t.variableDeclaration(
+            'let',
+            [t.variableDeclarator(id, p.node)],
+          ),
+        );
+        p.replaceWith(id);
+```
 
 ## Jsx优化【核心】
 ## 缓存【核心】
@@ -221,8 +320,35 @@ output:
 ## forgettti runtime 
 
 
-## 目前发现的优化点｜Bug
+## perf
 
 * 关于console的处理不应该缓存，否则第二次更新无法继续执行，即不打印
 * 会生成多余的依赖， 即 a.b 仅用到了b， 但也回缓存a，且执行isEqule = equle(a)的判断，浪费性能
 * react 原生hooks setXXX 在渲染期间本身就是不可能会变的，也是可以不缓存和对比的
+* 颗粒度能否再细化，支持独立的jsx缓存， 缓存组件是能减少一些组件刷新，但是如果组件拆分不是很细，这样做会更好，如: 
+```jsx
+function App () {
+  const [a] = useState(1);
+  const [b] = useState(2);
+  return <div>{a}
+  
+  <div>{b}</div>
+  </div>
+}
+
+// 编译后
+function App() {
+    const [a] = useState(1);
+  const [b] = useState(2);
+  /**
+   * forgetti code
+   * 
+  */
+  // 深度优先递归判断节点是否复用
+  const _el = _isEqule ? cache[x] : <div>{b}</div>
+ // isEqule 代表依赖的b变量是否能用缓存
+  const _el2 = _isEqule2 ? cache[xx] : <div>{a}{_el}</div>
+  // 同理， 这样就做到了支持单个jsx节点缓存
+  return _el2; // 返回最外层的节点即可
+}
+```
