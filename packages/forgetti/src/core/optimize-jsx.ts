@@ -43,7 +43,7 @@ function extractJSXExpressions(
     const trueOpeningName = getJSXIdentifier(openingName);
     const isJSXMember = isPathValid(openingName, t.isJSXMemberExpression);
     if (isPathValid(trueOpeningName, t.isJSXIdentifier)) {
-      if (isJSXMember || /^[A-Z_]/.test(trueOpeningName.node.name)) {
+      if (isJSXMember || /^[A-Z_]/.test(trueOpeningName.node.name)) { // 当前jsx是组件
         const id = path.scope.generateUidIdentifier('Component');
         const index = state.expressions.length;
         state.expressions.push(t.identifier(trueOpeningName.node.name));
@@ -65,7 +65,7 @@ function extractJSXExpressions(
         }
       }
     }
-    const attrs = openingElement.get('attributes');
+    const attrs = openingElement.get('attributes'); // 获取jsx attributes 处理表达式缓存
     for (let i = 0, len = attrs.length; i < len; i++) {
       const attr = attrs[i];
 
@@ -124,7 +124,7 @@ function extractJSXExpressions(
     }
   }
 
-  const children = path.get('children');
+  const children = path.get('children'); //  处理children表达式缓存 <div>{a.b} {a.b + c}</div>
   for (let i = 0, len = children.length; i < len; i++) {
     const child = children[i];
 
@@ -135,21 +135,21 @@ function extractJSXExpressions(
       if (isPathValid(expr, t.isJSXElement) || isPathValid(expr, t.isJSXFragment)) {
         extractJSXExpressions(expr, state, false);
       } else if (isPathValid(expr, t.isExpression)) {
-        const id = state.expressions.length;
+        const id = state.expressions.length; // 下标每一次push后都+1
         state.expressions.push(expr.node);
-        expr.replaceWith(
+        expr.replaceWith( // 使用_values+下标 动态替换对应的表达式
           t.memberExpression(
             state.source,
-            t.numericLiteral(id),
+            t.numericLiteral(id), // 对应的下标
             true,
           ),
         );
       }
-    } else if (isPathValid(child, t.isJSXSpreadChild)) {
-      const arg = child.get('expression');
+    } else if (isPathValid(child, t.isJSXSpreadChild)) { // children还是jsx的话
+      const arg = child.get('expression'); // 参数还是jsx的话， 缓存参数内的jsx
       if (isPathValid(arg, t.isJSXElement) || isPathValid(arg, t.isJSXFragment)) {
         extractJSXExpressions(arg, state, false);
-      } else {
+      } else { // 这里参数就还是表达式
         const id = state.expressions.length;
         state.expressions.push(arg.node);
         arg.replaceWith(
@@ -173,13 +173,13 @@ function transformJSX(
     return;
   }
   const state: State = {
-    source: path.scope.generateUidIdentifier('values'),
+    source: path.scope.generateUidIdentifier('values'), // 初始化存储所有jsx依赖的变量value, 组件会传入一个数组渲染 
     expressions: [],
     jsxs: [],
   };
-  extractJSXExpressions(path, state, true);
+  extractJSXExpressions(path, state, true); // 获取jsx内的表达式依赖，并使用source去替换对应的下标缓存
 
-  const memoComponent = path.scope.generateUidIdentifier('Memo');
+  const memoComponent = path.scope.generateUidIdentifier('Memo'); // 生成定义缓存组件标识_Memo
 
   let body: t.Expression | t.BlockStatement;
   if (state.jsxs.length) {
@@ -197,24 +197,24 @@ function transformJSX(
   } else {
     body = path.node;
   }
-  path.scope.getProgramParent().push({
+  path.scope.getProgramParent().push({ // 当前组件父作用域申明缓存的组件 _Memo1
     kind: 'const',
     id: memoComponent,
-    init: t.callExpression(
-      getImportIdentifier(
+    init: t.callExpression( // 赋值为一个执行函数
+      getImportIdentifier( // 当前执行的函数来自import语句 import {$$memo} from 'forgetti/runtime'
         ctx,
         path,
         RUNTIME_MEMO,
       ),
       [
-        getImportIdentifier(
+        getImportIdentifier( // 对一个参数传入react 的memo函数
           ctx,
           path,
           memoDefinition,
         ),
-        t.arrowFunctionExpression(
+        t.arrowFunctionExpression( // 第二个传输传入转换后的jsx函数, values => <div>{values[0]}: {value[1]}</div>
           [state.source],
-          body,
+          body, // 此时的body已经是替换转换后的values缓存下标
         ),
       ],
     ),
@@ -233,8 +233,8 @@ function transformJSX(
     );
   }
 
-  attrs.push(
-    t.jsxAttribute(
+  attrs.push( // 在此之前缓存的jsx已经被提到父级作用域了， 并为一个Memo组件, _Memo = _$$memo(memo, vlaues=> <div>{values[1]}</dvi>))
+    t.jsxAttribute( // 生成替换缓存的渲染函数 <Memo v={values}/>
       t.jsxIdentifier('v'),
       t.jsxExpressionContainer(
         t.arrayExpression(state.expressions),
@@ -243,9 +243,9 @@ function transformJSX(
   );
 
   path.replaceWith(
-    t.addComment(
+    t.addComment( // 添加注释 /** @forgetti jsx  */
       t.jsxElement(
-        t.jsxOpeningElement(
+        t.jsxOpeningElement( // 添加attrs内的缓存函数 _Memox
           t.jsxIdentifier(memoComponent.name),
           attrs,
           true,
