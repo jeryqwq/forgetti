@@ -92,9 +92,9 @@ export default class Optimizer {
     // Get the memo index
     const index = this.scope.createIndex(type);
     // Generate the access expression
-    const pos = t.memberExpression(header, index, true);
+    const pos = t.memberExpression(header, index, true); // 组合header 和index ，生成带缓存的下标变量 _cache[i] ，后期用来生成三元表达式
     // Generate the `v` identifier
-    const vid = this.path.scope.generateUidIdentifier('value');
+    const vid = this.path.scope.generateUidIdentifier('value'); // 生成唯一标识value 保存该次的值
 
     let condition: t.Expression | undefined;
 
@@ -127,7 +127,7 @@ export default class Optimizer {
     } else if (dependencies) {
       // just reuse the dependency
       condition = dependencies;
-    } else {
+    } else { // 首次缓存 import { $$equles } from '@forgetti/runtime'; _$$equals(_cache, 0, props),
       // Compare memoized version to incoming version
       condition = t.callExpression(
         getImportIdentifier(this.ctx, this.path, RUNTIME_EQUALS),
@@ -149,12 +149,12 @@ export default class Optimizer {
       eqid = condition;
     } else {
       // Generate a new identifier for the condition
-      eqid = this.path.scope.generateUidIdentifier('equals');
+      eqid = this.path.scope.generateUidIdentifier('equals'); // 生成对比三元表达式判定变量名equals[index]
     }
 
     // Generates the variable declaration
     const declaration: t.VariableDeclarator[] = [];
-    if (condition && condition.type !== 'Identifier') {
+    if (condition && condition.type !== 'Identifier') { // 生成对比函数表达式赋值定义  _equals[index] = _$$equals(_cache, index, 变量名),
       declaration.push(t.variableDeclarator(eqid, condition));
     }
 
@@ -220,18 +220,18 @@ export default class Optimizer {
     return record;
   }
 
-  memoizeIdentifier(
+  memoizeIdentifier( // 核心， 缓存变量， 各种表达式都会调用
     path: babel.NodePath,
     id: t.Identifier,
   ): OptimizedExpression {
-    if (isForeignBinding(this.path, path, id.name)) {
+    if (isForeignBinding(this.path, path, id.name)) { // 如果是来自非内部定义， 如import，全局定义等情况，不缓存
       return optimizedExpr(id, [], true);
     }
     // Check if scope has the binding (no globals)
     // we only want to memoize identifiers
     // that are part of the render evaluation
-    const binding = path.scope.getBindingIdentifier(id.name);
-    if (binding) {
+    const binding = path.scope.getBindingIdentifier(id.name); // 获取绑定的标识符
+    if (binding) { // 创建依赖
       // Memoize as a "dependency"
       return this.createMemo(binding, false);
     }
@@ -246,10 +246,10 @@ export default class Optimizer {
     return this.memoizeIdentifier(path, path.node);
   }
 
-  memoizeMemberExpression(
+  memoizeMemberExpression( // 缓存成员访问
     path: babel.NodePath<t.MemberExpression>,
   ): { expr: t.MemberExpression; deps: t.Expression[] } {
-    if (isConstant(this, path)) {
+    if (isConstant(this, path)) { // 如果是静态变量 -> 没有缓存
       return {
         expr: path.node,
         deps: [],
@@ -333,17 +333,17 @@ export default class Optimizer {
     return optimizedExpr(id);
   }
 
-  optimizeBinaryExpression(
+  optimizeBinaryExpression( // 优化二元表达式， 如： a + 3 此时的ast为{left: a, op: + ,right: 3}
     path: babel.NodePath<t.BinaryExpression>,
-  ): OptimizedExpression {
-    if (path.node.operator === '|>') {
+  ): OptimizedExpression { // 可以牵扯出复杂的表达式求解： 普拉特解析法（递归） ｜ LL 和 LR 分析
+    if (path.node.operator === '|>') { // js中应该没有这个操作符
       return optimizedExpr(path.node);
     }
     const leftPath = path.get('left');
 
-    const dependencies = createDependencies();
+    const dependencies = createDependencies(); // 初始化依赖数组
 
-    if (isPathValid(leftPath, t.isExpression)) {
+    if (isPathValid(leftPath, t.isExpression)) { // 这里是不是right 和left搞反了 😂， 但对于求依赖来说没有顺序影响
       const left = this.createDependency(leftPath);
       if (left) {
         path.node.left = left.expr;

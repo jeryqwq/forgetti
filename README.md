@@ -6,6 +6,7 @@ ToDoList：
 <https://codesandbox.io/s/forgetti-demo-h552p6?file=/src/DemoTodo/forgetIndex.jsx>
 
 核心原理： 编译期间使用数组缓存所有表达式，变量，jsx。劫持组件render，生成HOC组件，HOC内部处理缓存操作，缓存函数和jsx时，内部获取所有相关依赖，如果依赖没变化继续使用上一次的函数缓存，减少视图层更新。
+总结： auto memo
 
 ### 编译前
 
@@ -67,16 +68,22 @@ const App = ({
 
 ### 函数内联展开[前置] pre-inlining
 
-将只用到一次且在组件函数体内定义的函数移至函数调用处, 缓存后避免每次刷新都重复定义， 如，
-改步奏会执行两次，初始化时执行一次，各种缓存优化后再执行一次，二次优化缓存的代码。
+将只用到一次且在组件函数体内定义的表达式会移至函数调用处
 
 ```js
 //  优化前
 
-function a () {}
+function Example(props) {
+  function a () {}
 useEffect(a, [])
+const b = props.a + 1
+return <div>{b}</div>
+}
 //  优化后
-useEffect(function a () {}, []) // 方便后续进行依赖查找&缓存
+function Example (props) {
+useEffect(function a () {}, [])
+return <div>{props.a + 1}</div>
+}
 ```
 
 ```ts
@@ -337,8 +344,22 @@ function Example(props) {  let a, b, c;  let _hoisted2 = c = props.x;  let _hois
 
 ### Jsx优化 JSX Optimization【核心】
 
+为所有的jsx块根据依赖自动添加缓存， 所以，对于接入forgetti的项目，jsx分块也是极大的优化手段。
+
 找到jsx内函数的所有表达式，attribute、children， 如{props.a} <div a={props.a}></div>, 替换为缓存数组下标 {values[0]} <div a={values[0]}></div>此类的情况。 并提取到父级作用域， 自动添加 memo操作, 如 _Memo = $$memo(memo, (values) => <div a={values[0]}></div>)。
 把return 的代码替换为return <_Memo v={values} >, 此时一个自动memo就生成了。
+
+```js
+// input
+function Example(props) {  const a = <div>{props.a}</div>;  const getB = () => <div>{props.b}</div>;  return <div>{props.a}: {getB()}</div>;}
+
+// output 
+const _Memo = _$$memo(_memo, _values => <div>{_values[0]}</div>),
+  _Memo2 = _$$memo(_memo, _values2 => <div>{_values2[0]}: {_values2[1]}</div>),
+  _Memo3 = _$$memo(_memo, _values3 => <div>{_values3[0]}</div>);
+function Example(props) {  const a = /*@forgetti jsx*/<_Memo v={[props.a]} />;  return (/*@forgetti jsx*/<_Memo2 v={[props.a, (() => /*@forgetti jsx*/<_Memo3 v={[props.b]} />)()]} />  );}
+
+```
 
 ```js
 function transformJSX(
@@ -349,12 +370,12 @@ function transformJSX(
   if (shouldSkipJSX(path.node)) {
     return;
   }
-  const state: State = {
+  const state: State = { // 存储jsx解析相关参数
     source: path.scope.generateUidIdentifier('values'), // 初始化存储所有jsx依赖的变量value, 组件会传入一个数组渲染 
     expressions: [],
     jsxs: [],
   };
-  extractJSXExpressions(path, state, true); // 获取jsx内的表达式依赖，并使用source去替换对应的下标缓存
+  extractJSXExpressions(path, state, true); //核心函数，  获取jsx内的表达式依赖，并使用source对应的下标去替换对应的下标缓存
 
   const memoComponent = path.scope.generateUidIdentifier('Memo'); // 生成定义缓存组件标识_Memo
 
@@ -374,6 +395,7 @@ function transformJSX(
   } else {
     body = path.node;
   }
+  // 生成缓存函数定义
   path.scope.getProgramParent().push({ // 当前组件父作用域申明缓存的组件 _Memo1
     kind: 'const',
     id: memoComponent,
@@ -409,12 +431,12 @@ function transformJSX(
       ),
     );
   }
-
+ // 当前函数内替换上一步生成的缓存函数
   attrs.push( // 在此之前缓存的jsx已经被提到父级作用域了， 并为一个Memo组件, _Memo = _$$memo(memo, vlaues=> <div>{values[1]}</dvi>))
-    t.jsxAttribute( // 生成替换缓存的渲染函数 <Memo v={values}/>
+    t.jsxAttribute( // 生成替换缓存的渲染函数 <Memo v={[props.a]}/>
       t.jsxIdentifier('v'),
       t.jsxExpressionContainer(
-        t.arrayExpression(state.expressions),
+        t.arrayExpression(state.expressions), // 所有被依赖的表达式已经被存在了expressions里了，转为一个数组传递
       ),
     ),
   );
@@ -445,18 +467,18 @@ function extractJSXExpressions(
   state: State,
   top: boolean,
 ): void {
-  // Iterate attributes
+   // Iterate attributes
   if (isPathValid(path, t.isJSXElement)) {
     const openingElement = path.get('openingElement');
     const openingName = openingElement.get('name');
     const trueOpeningName = getJSXIdentifier(openingName);
     const isJSXMember = isPathValid(openingName, t.isJSXMemberExpression);
     if (isPathValid(trueOpeningName, t.isJSXIdentifier)) {
-      if (isJSXMember || /^[A-Z_]/.test(trueOpeningName.node.name)) { // 当前jsx是组件
+      if (isJSXMember || /^[A-Z_]/.test(trueOpeningName.node.name)) { // 当前jsx是组件 , 例如 const a = <App1 />
         const id = path.scope.generateUidIdentifier('Component');
         const index = state.expressions.length;
         state.expressions.push(t.identifier(trueOpeningName.node.name));
-        state.jsxs.push({
+        state.jsxs.push({ // 生成缓存values[index]下标的变量
           id,
           value: t.memberExpression(
             state.source,
@@ -474,13 +496,13 @@ function extractJSXExpressions(
         }
       }
     }
-    const attrs = openingElement.get('attributes'); // 获取jsx attributes 处理表达式缓存
-    for (let i = 0, len = attrs.length; i < len; i++) {
+    const attrs = openingElement.get('attributes'); // 获取jsx attributes 处理表达式缓存 <App a={props.a}/>
+    for (let i = 0, len = attrs.length; i < len; i++) { // 使用values[index]对应的下标索引替换attributes
       const attr = attrs[i];
 
       if (isPathValid(attr, t.isJSXAttribute)) {
         const key = attr.get('name');
-        if (top && isPathValid(key, t.isJSXIdentifier) && key.node.name === 'key') {
+        if (top && isPathValid(key, t.isJSXIdentifier) && key.node.name === 'key') { // 参数为key的时候 <div key={'123'}></div>
           const value = attr.get('value');
           if (isPathValid(value, t.isExpression)) {
             state.key = value.node;
@@ -493,14 +515,14 @@ function extractJSXExpressions(
           }
         } else {
           const value = attr.get('value');
-          if (isPathValid(value, t.isJSXElement) || isPathValid(value, t.isJSXFragment)) {
+          if (isPathValid(value, t.isJSXElement) || isPathValid(value, t.isJSXFragment)) { // 如果value还是jsx， 递归优化 <div a={<div b={{}}></div>}></div>
             extractJSXExpressions(value, state, false);
           }
           if (isPathValid(value, t.isJSXExpressionContainer)) {
             const expr = value.get('expression');
-            if (isPathValid(expr, t.isJSXElement) || isPathValid(expr, t.isJSXFragment)) {
+            if (isPathValid(expr, t.isJSXElement) || isPathValid(expr, t.isJSXFragment)) { // 奇葩的情况，不知道啥时候会出现
               extractJSXExpressions(expr, state, false);
-            } else if (isPathValid(expr, t.isExpression)) {
+            } else if (isPathValid(expr, t.isExpression)) { // 替换表达式values对应的索引， props.a -> value[i]
               const id = state.expressions.length;
               state.expressions.push(expr.node);
               expr.replaceWith(
@@ -533,7 +555,7 @@ function extractJSXExpressions(
     }
   }
 
-  const children = path.get('children'); //  处理children表达式缓存 <div>{a.b} {a.b + c}</div>
+  const children = path.get('children'); //  处理children表达式缓存 <div>{a.b} {a.b + c}</div> ， 核心和上述一致
   for (let i = 0, len = children.length; i < len; i++) {
     const child = children[i];
 
@@ -576,6 +598,8 @@ function extractJSXExpressions(
 
 ### 缓存 Memoization【核心】
 
+
+
 获取表达式依赖: forgetti/src/core/optimizer.ts  createDependency
 创建缓存依赖(加索引，生成二元表达式):forgetti/src/core/optimizer.ts createMemo
 
@@ -583,9 +607,9 @@ function extractJSXExpressions(
 
 ## perf
 
-* 关于console的处理不应该缓存，否则第二次更新无法继续执行，即不打印
+* 关于console的处理不应该缓存，否则第二次更新无法继续执行，即不打印，考虑增加配置跳过不需要缓存的函数
 * 会生成多余的依赖， 即 a.b 仅用到了b， 但也回缓存a，且执行isEqule = equle(a)的判断，浪费性能
-* react 原生hooks setXXX 在渲染期间本身就是不可能会变的，也是可以不缓存和对比的
+* react 原生hooks setXXX 在渲染期间本身就是不可能会变的，是可以不缓存和对比的
 * 颗粒度能否再细化，支持独立的jsx缓存， 缓存组件是能减少一些组件刷新，但是如果组件拆分不是很细，这样做会更好，如:
 
 ```jsx
@@ -601,7 +625,7 @@ function App () {
 // 编译后
 function App() {
     const [a] = useState(1);
-  const [b] = useState(2);
+    const [b] = useState(2);
   /**
    * forgetti code
    * 

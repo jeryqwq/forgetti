@@ -1,3 +1,7 @@
 function Example(props) {
-  return <div>{props.a}: {props.b / 3}</div>
+  const a = props.b + 3;
+  const b = function () {
+    console.log(a)
+  }
+  return <div>{props.a}: {a}</div>
 }

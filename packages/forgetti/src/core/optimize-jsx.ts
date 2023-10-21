@@ -43,11 +43,11 @@ function extractJSXExpressions(
     const trueOpeningName = getJSXIdentifier(openingName);
     const isJSXMember = isPathValid(openingName, t.isJSXMemberExpression);
     if (isPathValid(trueOpeningName, t.isJSXIdentifier)) {
-      if (isJSXMember || /^[A-Z_]/.test(trueOpeningName.node.name)) { // 当前jsx是组件
+      if (isJSXMember || /^[A-Z_]/.test(trueOpeningName.node.name)) { // 当前jsx是组件 , 例如 const a = <App1 />
         const id = path.scope.generateUidIdentifier('Component');
         const index = state.expressions.length;
         state.expressions.push(t.identifier(trueOpeningName.node.name));
-        state.jsxs.push({
+        state.jsxs.push({ // 生成缓存values[index]下标的变量
           id,
           value: t.memberExpression(
             state.source,
@@ -65,13 +65,13 @@ function extractJSXExpressions(
         }
       }
     }
-    const attrs = openingElement.get('attributes'); // 获取jsx attributes 处理表达式缓存
-    for (let i = 0, len = attrs.length; i < len; i++) {
+    const attrs = openingElement.get('attributes'); // 获取jsx attributes 处理表达式缓存 <App a={props.a}/>
+    for (let i = 0, len = attrs.length; i < len; i++) { // 使用values[index]对应的下标索引替换attributes
       const attr = attrs[i];
 
       if (isPathValid(attr, t.isJSXAttribute)) {
         const key = attr.get('name');
-        if (top && isPathValid(key, t.isJSXIdentifier) && key.node.name === 'key') {
+        if (top && isPathValid(key, t.isJSXIdentifier) && key.node.name === 'key') { // 参数为key的时候 <div key={'123'}></div>
           const value = attr.get('value');
           if (isPathValid(value, t.isExpression)) {
             state.key = value.node;
@@ -84,14 +84,14 @@ function extractJSXExpressions(
           }
         } else {
           const value = attr.get('value');
-          if (isPathValid(value, t.isJSXElement) || isPathValid(value, t.isJSXFragment)) {
+          if (isPathValid(value, t.isJSXElement) || isPathValid(value, t.isJSXFragment)) { // 如果value还是jsx， 递归优化 <div a={<div b={{}}></div>}></div>
             extractJSXExpressions(value, state, false);
           }
           if (isPathValid(value, t.isJSXExpressionContainer)) {
             const expr = value.get('expression');
-            if (isPathValid(expr, t.isJSXElement) || isPathValid(expr, t.isJSXFragment)) {
+            if (isPathValid(expr, t.isJSXElement) || isPathValid(expr, t.isJSXFragment)) { // 奇葩的情况，不知道啥时候会出现
               extractJSXExpressions(expr, state, false);
-            } else if (isPathValid(expr, t.isExpression)) {
+            } else if (isPathValid(expr, t.isExpression)) { // 替换表达式values对应的索引， props.a -> value[i]
               const id = state.expressions.length;
               state.expressions.push(expr.node);
               expr.replaceWith(
@@ -124,7 +124,7 @@ function extractJSXExpressions(
     }
   }
 
-  const children = path.get('children'); //  处理children表达式缓存 <div>{a.b} {a.b + c}</div>
+  const children = path.get('children'); //  处理children表达式缓存 <div>{a.b} {a.b + c}</div> ， 核心和上述一致
   for (let i = 0, len = children.length; i < len; i++) {
     const child = children[i];
 
