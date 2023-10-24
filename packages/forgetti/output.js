@@ -1,11 +1,3 @@
-function Example(props) {
-  const a = props.b + 3;
-  const b = function () {
-    console.log(a)
-  }
-  return <div>{props.a}: {a}</div>
-}
-
 import { useMemo as _useMemo } from "react";
 import { $$cache as _$$cache } from "forgetti/runtime";
 import { $$equals as _$$equals } from "forgetti/runtime";

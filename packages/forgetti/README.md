@@ -1,17 +1,21 @@
+[思维导图](https://yeqv9nxxyj.feishu.cn/docx/V9AzdnfnCoxLYOxyCkBcCouhnRh)
+
 ## 编译前：
-`jsx
+
+```jsx
 const App = ({a}) => {
   const [done, setDone] = useState(false);
   console.log(done)
   return <div>{a} - {done ? 'finish' : 'doing'}</div>
 }
-`
+```
+
 ## 编译后
 
 为每次表达式或者变量定义赋值语句先判定是否能缓存，如果函数依赖没变化，则该函数能走缓存。
 每一个申明的表达式或者变量都会多出两行代码，一行判断与上一次缓存是否相等，一行二元表达式初始化或者用原始值。
 
-`jsx
+```jsx
 // 注入运行时和依赖api 
 import { useMemo as _useMemo } from "react";
 import { $$cache as _$$cache } from "forgetti/runtime";
@@ -50,7 +54,9 @@ const App = ({
   return _equals5 ? _cache[6] : _cache[6] = /*@forgetti jsx*/<_Memo v={_value7} />;
 };
 
-`
+```
+
+
 init:  '({  a}) => {  const [done, setDone] = useState(false);  console.log(done);  return <div onClick={() => setDone(true)}>{a} - {done ? 'finish' : 'doing'}</div>;}'
 inline:  "({\n  a\n}) => {\n  const [done, setDone] = useState(false);\n  console.log(done);\n  return <div onClick={() => setDone(true)}>{a} - {done ? 'finish' : 'doing'}</div>;\n}"
 simply: '({  a}) => {  const [done, setDone] = useState(false);  console.log(done);  return <div onClick={() => setDone(true)}>{a} - {done ? 'finish' : 'doing'}</div>;}'

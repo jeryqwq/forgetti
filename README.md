@@ -1,4 +1,7 @@
 # forgetti 解析
+[思维导图](https://yeqv9nxxyj.feishu.cn/docx/V9AzdnfnCoxLYOxyCkBcCouhnRh)
+
+<img src="./20231024.png">
 
 ## 编译后Demo
 
@@ -597,7 +600,6 @@ function extractJSXExpressions(
 ```
 
 ### 缓存 Memoization【核心】
-
 
 
 获取表达式依赖: forgetti/src/core/optimizer.ts  createDependency
