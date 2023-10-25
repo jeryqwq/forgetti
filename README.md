@@ -1,4 +1,13 @@
 # forgetti 解析
+
+Forgetti is an auto-memoization Babel plugin I made for a hook-based flow like React hooks. This plugin was inspired by React Forget.（Forgetti是一个为函数组件自动缓存的babel插件， 灵感来自react forget）
+
+优化的最终还是编译
+
+# 导读
+
+react 性能优化一直是一个让开发者头疼的问题，随着版本迭代更新，业务代码需求变更，开发者很难在优化的颗粒度做取舍，例如本人，没有感觉到卡，没有多调一次API统一就是不用优化(狗头)，写写业务而已，优化的时候都够我完成几个小需求了
+
 [思维导图](https://yeqv9nxxyj.feishu.cn/docx/V9AzdnfnCoxLYOxyCkBcCouhnRh)
 
 <img src="./20231024.png">
@@ -607,37 +616,22 @@ function extractJSXExpressions(
 
 ### Post-inlining
 
-## perf
+## 收益
+说了那么多实现的方案和优化手段，那具体的收益效果呢，接下来我们在Owl项目中进行测试，对比下接入和未接入forgetti的react 状态下的性能分析报告。
 
-* 关于console的处理不应该缓存，否则第二次更新无法继续执行，即不打印，考虑增加配置跳过不需要缓存的函数
-* 会生成多余的依赖， 即 a.b 仅用到了b， 但也回缓存a，且执行isEqule = equle(a)的判断，浪费性能
-* react 原生hooks setXXX 在渲染期间本身就是不可能会变的，是可以不缓存和对比的
-* 颗粒度能否再细化，支持独立的jsx缓存， 缓存组件是能减少一些组件刷新，但是如果组件拆分不是很细，这样做会更好，如:
 
-```jsx
-function App () {
-  const [a] = useState(1);
-  const [b] = useState(2);
-  return <div>{a}
-  
-  <div>{b}</div>
-  </div>
-}
 
-// 编译后
-function App() {
-    const [a] = useState(1);
-    const [b] = useState(2);
-  /**
-   * forgetti code
-   * 
-  */
-  // 深度优先递归判断节点是否复用
-  cache[x] = _isEqule_b ? cache[xxx] : b
-  const _el = _isEqule_el ? cache[x] : <div>{b}</div>
- // isEqule 代表依赖的b变量是否能用缓存
-  const _el2 = _isEqule_el2 ? cache[xx] : <div>{a}{_el}</div>
-  // 同理， 这样就做到了支持单个jsx节点缓存
-  return _el2; // 返回最外层的节点即可
-}
+## 对比官方react forget
+
+在[React Advanced London 2023](https://www.youtube.com/watch?v=hn_L56ypX1A)上我们看到了react 官方也并没有放弃forget的想法，甚至出了兼容forget的运行时api[useMemoCache](https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberHooks.js#L1112-L1169)， 这几年也一直在实践并在部分生产环境(vr产品quest商城)中启用，等到被大部分验证后将会面向社区，看完编译后的效果，感觉相比forgetti基于babel的编译，forget仿佛会更胜一筹，似乎官方重写了适合react的javascript代码编译器(成本巨大)。
+
+多说无益，我们对比下多个demo看下实际双方的效果
+
+forget
+```js
+
+```
+forgetti
+```js
+
 ```
