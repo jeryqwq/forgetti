@@ -1,12 +1,88 @@
-# forgetti 解析
+# 导读
 
 Forgetti is an auto-memoization Babel plugin I made for a hook-based flow like React hooks. This plugin was inspired by React Forget.（Forgetti是一个为函数组件自动缓存的babel插件， 灵感来自react forget）
 
-优化的最终还是编译
+react 性能优化一直是一个让开发者头疼的问题，随着版本迭代更新，业务代码需求变更，开发者很难在优化的颗粒度做取舍，例如本人，没有感觉到卡，没有多调一次API统一就是不用优化(狗头)，写写业务而已，又不是造轮子，而且大量的usexxx缓存代码也会进一步增加代码的可读性，增加其他人（包括自己）在理解代码上的心智负担。基于useXXX的机制，很多刚接触的开发者有时候总会很难想通，why rerender again? Why not re-render?优化真的好麻烦啊，但是不优化对于一些场景的性能和用户体验又会大打折扣，出现莫名其妙的刷新、闪屏、卡顿等，要是有一种能够自动memo所有东西就好了。
 
-# 导读
+大概两年前[React Conf2021](https://www.youtube.com/watch?v=lGEMwh32soc) 团队第一次介绍了react forget这个插件，这个可以自动生成memo的官方版编译器，一经宣传，React forget就收到大量的关注，不论是视频的播放量还是黄玄大佬的人气，使该视频播放量一度在当期榜首，然而两年过去了，黄玄也离开了React团队，那React forget真的凉了吗，答案是没有，React forget一直都在React的[工作安排](https://react.dev/blog/2022/06/15/react-labs-what-we-have-been-working-on-june-2022#react-compiler)中，前几天在[React conf2023 London](https://www.youtube.com/watch?v=hn_L56ypX1A)上，官方也表示没有放弃React forget，这几年一直都在继续研究并投入到部分生产环境上，需要一些时间的验证再向社区开源，此时一位大佬(solidjs 作者)表示坐不住了，终于在今年三月份发布了社区版react forget， 他有着和react forget 一样的核心原理和效果。
+<img src="./publish.png" />
 
-react 性能优化一直是一个让开发者头疼的问题，随着版本迭代更新，业务代码需求变更，开发者很难在优化的颗粒度做取舍，例如本人，没有感觉到卡，没有多调一次API统一就是不用优化(狗头)，写写业务而已，优化的时候都够我完成几个小需求了
+# 收益
+
+接下来我们在Owl项目中进行测试，不对代码做任何改动，对比下接入和未接入forgetti的react更新状态下的性能分析报告和渲染时间。
+
+我们在[Owl](https://platformtest.pupuvip.com/owl-web-test/owl-v2/trace/chain-analysis)一个比较复杂的表单搜索页面中接入, 在右上角的做相同的刷新操作， 对比下使用前和使用后的差异, 仅对update状态查看优化效果.
+
+## react Profiler dev tool
+
+基于相同操作，我们使用react dev tool Perfiler去查看对应的优化结果(着重对比有优化效果的commit)：
+
+优化前
+<img src="./prev.png" />
+
+优化后
+<img src="./after.png" />
+
+由react性能分析工具可以看出，TraceList组件update时，使用forgetti后此次commit由449ms的redner耗时优化指159.7ms的耗时，性能提升至三倍+，头部定位组件和表格Cell组件完全被缓存，图中被红框框住的部分。
+
+## react Profiler api
+
+[React Profiler API](https://react.dev/reference/react/Profiler) 会分析渲染和渲染成本，以帮助识别应用程序中卡顿的原因。
+
+Profiler 接受一个 onRender 回调函数，当被分析的渲染树中的组件提交更新时，就会调用它。
+
+ 基于相同操作，我们使用actualDuration参数查看当前组件和子组件上每次update时花费的时间。
+
+```js
+    <Profiler
+      id="chainAnalysis"
+      onRender={(id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+        console.log(id, actualDuration);
+      }}
+    >
+      <CollapsibleLayout />
+      /** 
+       * xxxx
+       * **/
+    </Profiler>
+```
+
+点击刷新按钮触发的八次更新， 可以看到，三次比较耗时的更新应该对应的是表单，图表 和表格。
+
+<img src="./line.png"/>
+
+优化前：
+
+```
+ chainAnalysis 562.7000000029802
+ chainAnalysis 0.5
+ chainAnalysis 0.20000000018626451
+ chainAnalysis 435.9999999916181
+ chainAnalysis 0.20000000018626451
+ chainAnalysis 0.20000000018626451
+ chainAnalysis 0.10000000055879354
+ chainAnalysis 544.7999999960884
+```
+
+优化后:
+
+```
+ chainAnalysis 174.6000000005588
+ chainAnalysis 0.2999999998137355
+ chainAnalysis 0.10000000055879354
+ chainAnalysis 161.90000000502914
+ chainAnalysis 0
+ chainAnalysis 0.2999999998137355
+ chainAnalysis 0.10000000055879354
+ chainAnalysis 411.5999999893829
+
+```
+
+可以看到，每次复杂度高的更新场景，时间消耗几乎综合减少了两倍左右
+
+以上优化仅次于使用者不了解forgetti的情况下，如果在代码中仅仅只是一些小改动，可以优化到更好，那么有什么做法可以让代码更auto memo呢，我们不妨试着更深入forgetti。
+
+# forgetti 解析
 
 [思维导图](https://yeqv9nxxyj.feishu.cn/docx/V9AzdnfnCoxLYOxyCkBcCouhnRh)
 
@@ -610,28 +686,13 @@ function extractJSXExpressions(
 
 ### 缓存 Memoization【核心】
 
-
 获取表达式依赖: forgetti/src/core/optimizer.ts  createDependency
 创建缓存依赖(加索引，生成二元表达式):forgetti/src/core/optimizer.ts createMemo
 
 ### Post-inlining
 
-## 收益
-说了那么多实现的方案和优化手段，那具体的收益效果呢，接下来我们在Owl项目中进行测试，对比下接入和未接入forgetti的react 状态下的性能分析报告。
+## todo
 
+### 可配置跳过表达式缓存
 
-
-## 对比官方react forget
-
-在[React Advanced London 2023](https://www.youtube.com/watch?v=hn_L56ypX1A)上我们看到了react 官方也并没有放弃forget的想法，甚至出了兼容forget的运行时api[useMemoCache](https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberHooks.js#L1112-L1169)， 这几年也一直在实践并在部分生产环境(vr产品quest商城)中启用，等到被大部分验证后将会面向社区，看完编译后的效果，感觉相比forgetti基于babel的编译，forget仿佛会更胜一筹，似乎官方重写了适合react的javascript代码编译器(成本巨大)。
-
-多说无益，我们对比下多个demo看下实际双方的效果
-
-forget
-```js
-
-```
-forgetti
-```js
-
-```
+### dev环境中支持sourceMap
