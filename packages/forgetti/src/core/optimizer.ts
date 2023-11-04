@@ -291,7 +291,7 @@ export default class Optimizer {
     return this.createMemo(result.expr, result.deps);
   }
 
-  optimizeConditionalExpression(
+  optimizeConditionalExpression( // bug here 
     path: babel.NodePath<t.ConditionalExpression>,
   ): OptimizedExpression {
     const id = path.scope.generateUidIdentifier('value');
@@ -307,7 +307,12 @@ export default class Optimizer {
     this.scope = alternate;
     const optimizedAlternate = this.optimizeExpression(alternatePath);
     this.scope = parent;
-
+    const dependencies = createDependencies();
+    const deps = this.createDependency(path.get('test'));
+    if (deps) {
+      path.node.property = deps.expr;
+      mergeDependencies(dependencies, deps.deps);
+    }
     consequent.push(
       t.expressionStatement(
         t.assignmentExpression('=', id, optimizedConsequent.expr),
@@ -329,8 +334,7 @@ export default class Optimizer {
         t.blockStatement(alternate.getStatements()),
       ),
     );
-
-    return optimizedExpr(id);
+    return optimizedExpr(id, dependencies);
   }
 
   optimizeBinaryExpression( // 优化二元表达式， 如： a + 3 此时的ast为{left: a, op: + ,right: 3}
