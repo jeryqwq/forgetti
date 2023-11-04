@@ -310,7 +310,6 @@ export default class Optimizer {
     const dependencies = createDependencies();
     const deps = this.createDependency(path.get('test'));
     if (deps) {
-      path.node.property = deps.expr;
       mergeDependencies(dependencies, deps.deps);
     }
     consequent.push(
