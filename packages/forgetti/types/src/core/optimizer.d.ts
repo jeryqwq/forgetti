@@ -26,15 +26,19 @@ export default class Optimizer {
      * Registers a dependency
      */
     createDependency<T extends t.Expression>(path: babel.NodePath<T>): OptimizedExpression | undefined;
-    memoizeIdentifier(path: babel.NodePath, id: t.Identifier): OptimizedExpression;
+    memoizeIdentifier(// 核心， 缓存变量， 各种表达式都会调用
+    path: babel.NodePath, id: t.Identifier): OptimizedExpression;
     optimizeIdentifier(path: babel.NodePath<t.Identifier>): OptimizedExpression;
-    memoizeMemberExpression(path: babel.NodePath<t.MemberExpression>): {
+    memoizeMemberExpression(// 缓存成员访问
+    path: babel.NodePath<t.MemberExpression>): {
         expr: t.MemberExpression;
         deps: t.Expression[];
     };
     optimizeMemberExpression(path: babel.NodePath<t.MemberExpression>): OptimizedExpression;
-    optimizeConditionalExpression(path: babel.NodePath<t.ConditionalExpression>): OptimizedExpression;
-    optimizeBinaryExpression(path: babel.NodePath<t.BinaryExpression>): OptimizedExpression;
+    optimizeConditionalExpression(// bug here 
+    path: babel.NodePath<t.ConditionalExpression>): OptimizedExpression;
+    optimizeBinaryExpression(// 优化二元表达式， 如： a + 3 此时的ast为{left: a, op: + ,right: 3}
+    path: babel.NodePath<t.BinaryExpression>): OptimizedExpression;
     optimizeLogicalExpression(path: babel.NodePath<t.LogicalExpression>): OptimizedExpression;
     optimizeUnaryExpression(path: babel.NodePath<t.UnaryExpression>): OptimizedExpression;
     optimizeEffect(path: babel.NodePath<t.CallExpression>): OptimizedExpression;

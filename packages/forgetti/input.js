@@ -1,8 +1,9 @@
-import React, { useEffect, useState, memo } from 'react';
+function Component({a, b}) {
+  const x = [];
+  x.push(a);
 
-export default memo(function Test(props) {
-  const b = {
-    a: props.a ? 2 : 1,
-  }
-  return <div>{b.a}</div>
-});
+  const y = x;
+  y.push(b);
+    
+  return <div >{x}</div>;
+}
